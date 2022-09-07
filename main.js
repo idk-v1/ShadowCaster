@@ -125,7 +125,7 @@ function update(x, y)
 
 function render()
 {
-    ctx.fillStyle = "#44556611";
+    ctx.fillStyle = "#66778811";
     if (done) ctx.fillStyle = "#00000004";
     ctx.fillRect(0, 0, w * size, h * size);
     for (var y = 0; y < h; y++)
