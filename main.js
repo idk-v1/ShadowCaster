@@ -1,7 +1,8 @@
 var can = document.getElementById("can");
 var ctx = can.getContext("2d");
 
-var size = 50; //Width of tiles
+var size = 75; //Width of tiles
+var count = 0;
 var done = false;
 var ledcount = 0;
 var led = ledcount;
@@ -35,27 +36,45 @@ var rndY = Math.floor(Math.random() * h);
 
 setInterval(tick, 0);
 tiles[rndX + rndY * w] = new tile(rndX, rndY, 0);
-led += tiles.length / w / h / 8;
+led += (50 / (w * h));
 
 function tick()
 {
     render();
     update();
+    count++;
+    //console.log(count);
+    if (count >= 2750 && !done)
+    {
+        for (var y = 0; y < h; y++)
+        {
+            for (var x = 0; x < w; x++)
+            {
+                update(x, y);
+            }
+        }
+    }
 }
 
-function update()
+function update(x, y)
 {
     if (done) 
     {
         donecount++;
         if (donecount >= 500)
         {
+            donecount = -1000000000000;
             location.reload();
         }
         return;
     }
-    rndX = Math.floor(Math.random() * w);
-    rndY = Math.floor(Math.random() * h);
+    rndX = x;
+    rndY = y;
+    if (!x)
+    {
+        rndX = Math.floor(Math.random() * w);
+        rndY = Math.floor(Math.random() * h);
+    }
     if (true)
     {
         var yes = false;
@@ -93,7 +112,7 @@ function update()
             if (!tiles[rndX + rndY * w].s)
             {
                 tiles[rndX + rndY * w] = new tile(rndX, rndY, led);
-                led += tiles.length / w / h / 8;
+                led += (50 / (w * h));            
             }
         }
 
