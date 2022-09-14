@@ -1,198 +1,273 @@
-var can = document.getElementById("can");
-var ctx = can.getContext("2d");
+// Find intersection of RAY & SEGMENT
+function getIntersection(ray,segment){
 
-var size = 75; //Width of tiles
-var count = 0;
-var done = false;
-var ledcount = 0;
-var led = ledcount;
-var donecount = 0;
+	// RAY in parametric: Point + Delta*T1
+	var r_px = ray.a.x;
+	var r_py = ray.a.y;
+	var r_dx = ray.b.x-ray.a.x;
+	var r_dy = ray.b.y-ray.a.y;
 
-can.style.top = size / 2 + "px";
-can.style.left = size / 2 + "px";
-can.style.position = "fixed";
-can.width = window.innerWidth - size;
-can.height = window.innerHeight - size;
+	// SEGMENT in parametric: Point + Delta*T2
+	var s_px = segment.a.x;
+	var s_py = segment.a.y;
+	var s_dx = segment.b.x-segment.a.x;
+	var s_dy = segment.b.y-segment.a.y;
 
-var w = Math.floor(can.width / size);
-var h = Math.floor(can.height / size);
+	// Are they parallel? If so, no intersect
+	var r_mag = Math.sqrt(r_dx*r_dx+r_dy*r_dy);
+	var s_mag = Math.sqrt(s_dx*s_dx+s_dy*s_dy);
+	if(r_dx/r_mag==s_dx/s_mag && r_dy/r_mag==s_dy/s_mag){
+		// Unit vectors are the same.
+		return null;
+	}
 
-var tiles = new Array(w * h).fill(new btile());
+	// SOLVE FOR T1 & T2
+	// r_px+r_dx*T1 = s_px+s_dx*T2 && r_py+r_dy*T1 = s_py+s_dy*T2
+	// ==> T1 = (s_px+s_dx*T2-r_px)/r_dx = (s_py+s_dy*T2-r_py)/r_dy
+	// ==> s_px*r_dy + s_dx*T2*r_dy - r_px*r_dy = s_py*r_dx + s_dy*T2*r_dx - r_py*r_dx
+	// ==> T2 = (r_dx*(s_py-r_py) + r_dy*(r_px-s_px))/(s_dx*r_dy - s_dy*r_dx)
+	var T2 = (r_dx*(s_py-r_py) + r_dy*(r_px-s_px))/(s_dx*r_dy - s_dy*r_dx);
+	var T1 = (s_px+s_dx*T2-r_px)/r_dx;
 
-bod = document.querySelector("body");
-bod.style = "padding: 0; border: 0; margin: 0; overflow: hidden; background-color: #000;";
+	// Must be within parametic whatevers for RAY/SEGMENT
+	if(T1<0) return null;
+	if(T2<0 || T2>1) return null;
 
-ctx.fillStyle = "#445566";
-ctx.fillRect(0, 0, w * size, h * size);
+	// Return the POINT OF INTERSECTION
+	return {
+		x: r_px+r_dx*T1,
+		y: r_py+r_dy*T1,
+		param: T1
+	};
 
-var rndX = Math.floor(Math.random() * w);
-var rndY = Math.floor(Math.random() * h);
-/*
-0 = UP
-1 = RIGHT
-2 = DOWN
-3 = LEFT
-*/
+}
 
-setInterval(tick, 0);
-tiles[rndX + rndY * w] = new tile(rndX, rndY, 0);
-led += (50 / (w * h));
+///////////////////////////////////////////////////////
+
+// DRAWING
+var canvas = document.getElementById("can");
+canvas.width = Math.floor(window.innerWidth / 50) * 50;
+canvas.height = Math.floor(window.innerHeight / 50) * 50;
+var ctx = canvas.getContext("2d");
+var cx = canvas.width / 2;
+var cy = canvas.height / 2;
+
+var w = false;
+var a = false;
+var s = false;
+var d = false;
+
+// LINE SEGMENTS
+var segments = [
+
+	// Border
+	{a:{x:0,y:0}, b:{x:canvas.width,y:0}},
+	{a:{x:canvas.width,y:0}, b:{x:canvas.width,y:canvas.height}},
+	{a:{x:canvas.width,y:canvas.height}, b:{x:0,y:canvas.height}},
+	{a:{x:0,y:canvas.height}, b:{x:0,y:0}},
+
+	// Polygon #1
+	{a:{x:100,y:150}, b:{x:120,y:50}},
+	{a:{x:120,y:50}, b:{x:200,y:80}},
+	{a:{x:200,y:80}, b:{x:140,y:210}},
+	{a:{x:140,y:210}, b:{x:100,y:150}},
+
+	// Polygon #2
+	{a:{x:100,y:200}, b:{x:120,y:250}},
+	{a:{x:120,y:250}, b:{x:60,y:300}},
+	{a:{x:60,y:300}, b:{x:100,y:200}},
+
+	// Polygon #3
+	{a:{x:200,y:260}, b:{x:220,y:150}},
+	{a:{x:220,y:150}, b:{x:300,y:200}},
+	{a:{x:300,y:200}, b:{x:350,y:320}},
+	{a:{x:350,y:320}, b:{x:200,y:260}},
+
+	// Polygon #4
+	{a:{x:340,y:60}, b:{x:360,y:40}},
+	{a:{x:360,y:40}, b:{x:370,y:70}},
+	{a:{x:370,y:70}, b:{x:340,y:60}},
+
+	// Polygon #5
+	{a:{x:450,y:190}, b:{x:560,y:170}},
+	{a:{x:560,y:170}, b:{x:540,y:270}},
+	{a:{x:540,y:270}, b:{x:430,y:290}},
+	{a:{x:430,y:290}, b:{x:450,y:190}},
+
+	// Polygon #6
+	{a:{x:400,y:95}, b:{x:580,y:50}},
+	{a:{x:580,y:50}, b:{x:480,y:150}},
+	{a:{x:480,y:150}, b:{x:400,y:95}}
+
+];
+
+//Game Loop
+var last = performance.now();
+var dt = 0;
+var interval = setInterval(tick, 0);
+
+// PLAYER
+var Player = {
+	x: 0,
+	y: 0,
+    xv: 0,
+    yv: 0,
+    speed: 5
+};
+document.addEventListener("keydown", function (e) 
+{
+    if (e.key == "w") w = true;
+    if (e.key == "a") a = true;
+    if (e.key == "s") s = true;
+    if (e.key == "d") d = true;
+});
+document.addEventListener("keyup", function (e) 
+{
+    if (e.key == "w") w = false;
+    if (e.key == "a") a = false;
+    if (e.key == "s") s = false;
+    if (e.key == "d") d = false;
+});
 
 function tick()
 {
-    render();
-    update();
-    count++;
-    //console.log(count);
-    if (count >= 2750 && !done)
+    var now = performance.now();
+    dt = now - last;
+    last = now;
+    while (dt >= 1000 / 60)
     {
-        for (var y = 0; y < h; y++)
-        {
-            for (var x = 0; x < w; x++)
-            {
-                update(x, y);
-            }
-        }
+        dt -= 1000 / 60;
+        update()
     }
+    render();
 }
 
-function update(x, y)
+function update()
 {
-    if (done) 
-    {
-        donecount++;
-        if (donecount >= 500)
-        {
-            donecount = -1000000000000;
-            location.reload();
-        }
-        return;
-    }
-    rndX = x;
-    rndY = y;
-    if (!x)
-    {
-        rndX = Math.floor(Math.random() * w);
-        rndY = Math.floor(Math.random() * h);
-    }
-    if (true)
-    {
-        var yes = false;
-        if (tiles[rndX + rndY * w - w] != undefined)
-        {
-            if (tiles[rndX + rndY * w - w].s)
-            {
-                yes = true;
-            }
-        }
-        if (tiles[rndX + rndY * w + w] != undefined)
-        {
-            if (tiles[rndX + rndY * w + w].s)
-            {
-                yes = true;
-            }
-        }
-        if (tiles[rndX + rndY * w - 1] != undefined)
-        {
-            if (tiles[rndX + rndY * w - 1].s && (rndX + rndY * w - 1) % w != w - 1)
-            {
-                yes = true;
-            }
-        }
-        if (tiles[rndX + rndY * w + 1] != undefined)
-        {
-            if (tiles[rndX + rndY * w + 1].s && (rndX + rndY * w + 1) % w != 0)
-            {
-                yes = true;
-            }
-        }
-
-        if (yes)
-        {
-            if (!tiles[rndX + rndY * w].s)
-            {
-                tiles[rndX + rndY * w] = new tile(rndX, rndY, led);
-                led += (50 / (w * h));            
-            }
-        }
-
-    }
-    if (tiles.every(function(v) {return v.s == true})) done = true;
-    if (done) console.log("DONE");
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(rndX * size, rndY * size, size, size);
+    if (w) Player.yv = -Player.speed;
+    if (a) Player.xv = -Player.speed;
+    if (s) Player.yv = Player.speed;
+    if (d) Player.xv = Player.speed;
+    Player.y += Player.yv;
+    Player.x += Player.xv;
+    Player.yv /= 5;
+    Player.xv /= 5;
 }
 
 function render()
 {
-    ctx.fillStyle = "#66778811";
-    if (done) ctx.fillStyle = "#00000004";
-    ctx.fillRect(0, 0, w * size, h * size);
-    for (var y = 0; y < h; y++)
-    {
-        for (var x = 0; x < w; x++)
-        {
-            ctx.fillStyle = "#000";
-            ctx.fillStyle = "hsl(" + tiles[x + y * w].lead + "deg,100%,50%)";
-            if (tiles[x + y * w].s) ctx.fillRect(x * size + size / 4, y * size + size / 4, size / 2, size / 2);
-            if (tiles[x + y * w].u)
-            {
-                ctx.fillRect(x * size + size / 4, y * size, size / 2, size / 2);
-            }
-            if (tiles[x + y * w].r)
-            {
-                ctx.fillRect(x * size + size / 2, y * size + size / 4, size / 2, size / 2);
-            }
-            if (tiles[x + y * w].d)
-            {
-                ctx.fillRect(x * size + size / 4, y * size + size / 2, size / 2, size / 2);
-            }
-            if (tiles[x + y * w].l)
-            {
-                ctx.fillRect(x * size, y * size + size / 4, size / 2, size / 2);
-            }
-        
-            ctx.strokeStyle = "#000";
-            ctx.strokeRect(x * size, y * size, size, size);
-        }
-    }
-}
+	// Clear canvas
+    ctx.resetTransform();
+    ctx.fillStyle = "#000";
+	ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.translate(-Player.x + cx, -Player.y + cy);
+	// Draw segments
+	ctx.strokeStyle = "#999";
+	for(var i=0;i<segments.length;i++){
+		var seg = segments[i];
+		ctx.beginPath();
+		ctx.moveTo(seg.a.x,seg.a.y);
+		ctx.lineTo(seg.b.x,seg.b.y);
+		ctx.stroke();
+	}
 
-function tile(x, y, lead)
-{
-    this.lead = lead;
-    this.s = true;
+	// Get all unique points
+	var points = (function(segments){
+		var a = [];
+		segments.forEach(function(seg){
+			a.push(seg.a,seg.b);
+		});
+		return a;
+	})(segments);
+	var uniquePoints = (function(points){
+		var set = {};
+		return points.filter(function(p){
+			var key = p.x+","+p.y;
+			if(key in set){
+				return false;
+			}else{
+				set[key]=true;
+				return true;
+			}
+		});
+	})(points);
 
-    this.u = false;
-    this.r = false;
-    this.d = false;
-    this.l = false;
+	// Get all angles
+	var uniqueAngles = [];
+	for(var j=0;j<uniquePoints.length;j++){
+		var uniquePoint = uniquePoints[j];
+		var angle = Math.atan2(uniquePoint.y-Player.y,uniquePoint.x-Player.x);
+		uniquePoint.angle = angle;
+		uniqueAngles.push(angle-0.00001,angle,angle+0.00001);
+	}
 
-    if (tiles[x + y * w - w] != undefined) this.u = tiles[x + y * w - w].d;
-    if (tiles[x + y * w + 1] != undefined) this.r = tiles[x + y * w + 1].l;
-    if (tiles[x + y * w + w] != undefined) this.d = tiles[x + y * w + w].u;
-    if (tiles[x + y * w - 1] != undefined) this.l = tiles[x + y * w - 1].r;
+	// RAYS IN ALL DIRECTIONS
+	var intersects = [];
+	for(var j=0;j<uniqueAngles.length;j++){
+		var angle = uniqueAngles[j];
 
-    if (this.u === null) this.u = Math.floor(Math.random() * 5) >= 2 ? true : false;
-    if (this.r === null) this.r = Math.floor(Math.random() * 5) >= 2 ? true : false;
-    if (this.d === null) this.d = Math.floor(Math.random() * 5) >= 2 ? true : false;
-    if (this.l === null) this.l = Math.floor(Math.random() * 5) >= 2 ? true : false;
-    
-    if (lead == ledcount)
-    {
-        this.u = true;
-        this.r = true;
-        this.d = true;
-        this.l = true;
-    }
-}
+		// Calculate dx & dy from angle
+		var dx = Math.cos(angle);
+		var dy = Math.sin(angle);
 
-function btile()
-{
-    this.u = null;
-    this.r = null;
-    this.d = null;
-    this.l = null;
-    this.s = null;
-    this.lead = 0;
+		// Ray from center of screen to mouse
+		var ray = {
+			a:{x:Player.x,y:Player.y},
+			b:{x:Player.x+dx,y:Player.y+dy}
+		};
+
+		// Find CLOSEST intersection
+		var closestIntersect = null;
+		for(var i=0;i<segments.length;i++){
+			var intersect = getIntersection(ray,segments[i]);
+			if(!intersect) continue;
+			if(!closestIntersect || intersect.param<closestIntersect.param){
+				closestIntersect=intersect;
+			}
+		}
+
+		// Intersect angle
+		if(!closestIntersect) continue;
+		closestIntersect.angle = angle;
+
+		// Add to list of intersects
+		intersects.push(closestIntersect);
+
+	}
+
+	// Sort intersects by angle
+	intersects = intersects.sort(function(a,b){
+		return a.angle-b.angle;
+	});
+
+	// DRAW AS A GIANT POLYGON
+    const gradient = ctx.createRadialGradient(Player.x,Player.y,100, Player.x,Player.y,250);
+
+    // Add three color stops
+    gradient.addColorStop(0, '#ffff80');
+    gradient.addColorStop(1, '#000000');
+
+	ctx.fillStyle = gradient;
+	ctx.beginPath();
+	ctx.moveTo(intersects[0].x,intersects[0].y);
+	for(var i=1;i<intersects.length;i++){
+		var intersect = intersects[i];
+		ctx.lineTo(intersect.x,intersect.y);
+	}
+	ctx.fill();
+
+    ctx.fillStyle = "#ffff80";
+    ctx.strokeStyle = "#000";
+    ctx.resetTransform();
+    ctx.fillRect(cx - 10, cy - 10, 20, 20);
+    ctx.strokeRect(cx - 10, cy - 10, 20, 20);
+	// DRAW DEBUG LINES
+	// ctx.strokeStyle = "#f55";
+	// for(var i=0;i<intersects.length;i++){
+	// 	var intersect = intersects[i];
+	// 	ctx.beginPath();
+	// 	ctx.moveTo(Player.x,Player.y);
+	// 	ctx.lineTo(intersect.x,intersect.y);
+	// 	ctx.stroke();
+	// }
 }
