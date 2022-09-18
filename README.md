@@ -1,2 +1,2 @@
-# Patterns
-It takes way longer than it should to make a thing of lines
+# ShadowCaster
+Use WASD to move around. Uncomment ghosts for ghosts.
